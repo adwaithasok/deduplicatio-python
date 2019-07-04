@@ -1,4 +1,4 @@
-# detects duplicate images already present in the same album
+
 from pymongo import MongoClient
 import cv2 as cv
 import hashlib
