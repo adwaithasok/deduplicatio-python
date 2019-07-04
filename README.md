@@ -2,7 +2,7 @@
 Image deduplication system using Opencv and MD5 hashing algorithm
 
 ```
-Image-deduplica helps to detect the duplicate images before uploading into the database which helps to prevent uploaded duplicate images into datbase.
+Image-deduplica helps to detect the duplicate images before uploading into the database which helps to prevent uploaded duplicate images into database.
 ```
 ```
 Requirements:
