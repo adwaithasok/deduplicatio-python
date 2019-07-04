@@ -6,10 +6,10 @@ import hashlib
 class DuplicateImage:
 
     def __init__(self):
-        self.image = "/home/rahul/Documents/Datanext/nlu_backup/100CANON/IMG_0842.JPG"
-        self.client = MongoClient("mongodb://localhost:27017/")
-        self.database = self.client["travl"]
-        self.collection = self.database["imgblog"]
+        self.image = "IMG_0842.JPG"
+        self.client = MongoClient("datbased_address")
+        self.database = self.client["datbase_name"]
+        self.collection = self.database["collection_name"]
 
     def dup(self, image):
 
@@ -31,7 +31,6 @@ class DuplicateImage:
         :return: returns two type of status{image exists in database or not} {de-duplication can be done or not}..
         """
         try:
-            image = "/home/rahul/Documents/Datanext/nlu_backup/100CANON/IMG_0842.JPG"
             image_file = open(image, 'rb').read()
             key = hashlib.md5(image_file).hexdigest()
 
