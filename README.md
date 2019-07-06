@@ -11,7 +11,7 @@ python
 Opencv
 MD5
 ```
-```
+`python``
 Usage:
 from deduplication import DuplicateImage
 module = DuplicateImage()
