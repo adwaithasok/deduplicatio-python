@@ -1,54 +1,89 @@
-
-from pymongo import MongoClient
-import cv2 as cv
+import base64
 import hashlib
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
 
-class DuplicateImage:
 
-    def __init__(self):
-        self.image = "IMG_0842.JPG"
-        self.client = MongoClient("datbased_address")
-        self.database = self.client["datbase_name"]
-        self.collection = self.database["collection_name"]
+class DuplicateFile:
 
-    def dup(self, image):
+    def __init__(self, firebase_credentials_path):
+        # Initialize Firebase
+        cred = credentials.Certificate(firebase_credentials_path)
+        firebase_admin.initialize_app(cred)
+        self.db = firestore.client()
 
-        """
-        :param image: input image to convert into  grayscale image..
-        :return: will create image with sample.jpg name..
-        """
+    def generate_hash(self, data):
+        return hashlib.md5(data).hexdigest()
 
-        img = cv.imread(image, 0)
-        (thresh, img_bin) = cv.threshold(img, 128, 255, cv.THRESH_BINARY | cv.THRESH_OTSU)
-        img_bin = 255 - img_bin
-        cv.imwrite("sample.jpg", img_bin)
-
-    # create hash from given new image and compare with already existing images to detect duplicates..
-    def detect(self, image, album):
-        """
-        :param image: input new image to check duplication in the database..
-        :param album: album which needs to scan the database to get the hash keys of the stored images..
-        :return: returns two type of status{image exists in database or not} {de-duplication can be done or not}..
-        """
+    def check_duplicate(self, data, album):
         try:
-            image_file = open(image, 'rb').read()
-            key = hashlib.md5(image_file).hexdigest()
+            data_bytes = data.encode('utf-8')
+            data_hash = self.generate_hash(data_bytes)
 
-            # getting image hash keys from the database for relative images
-            img = self.collection.find_one(album)
+            # Check if the data exists in Firestore
+            doc_ref = self.db.collection(album).document('file_data')
+            doc = doc_ref.get()
 
-            hash_key = img["hash"]
+            if doc.exists:
+                data = doc.to_dict()
+                hash_key = data.get("hash")
 
-            # this logic to be updated later while testing phase
-            # matching the key with in the database or relative album
-            if key == hash_key:
-                isSuccess = False
-                print("image already exists in the database!!!")
-                return isSuccess
+                if data_hash == hash_key:
+                    print("Data already exists in the database!!!")
+                    return False, data.get("data")
+                else:
+                    doc_ref.set({'hash': data_hash, 'data': data})
+                    return True, None
             else:
-                isSuccess = True
-                return isSuccess
-        except Exception as ex:
-            print("duplication can't be determined/ {}".format(ex))
+                doc_ref.set({'hash': data_hash, 'data': data})
+                return True, None
 
-            return 500
+        except Exception as ex:
+            print(f"Duplicate check failed: {ex}")
+            return False, None
+
+    def retrieve_data_from_hash(self, data_hash, album, download_path):
+        try:
+            doc_ref = self.db.collection(album).document('file_data')
+            doc = doc_ref.get()
+
+            if doc.exists:
+                data = doc.to_dict()
+                hash_key = data.get("hash")
+
+                if data_hash == hash_key:
+                    # Retrieve the original data from the hash
+                    retrieved_data = data.get("data")
+                    with open(download_path, "wb") as file:
+                        file.write(base64.b64decode(retrieved_data))
+                    return download_path
+                else:
+                    print("Data with the specified hash not found!")
+                    return None
+            else:
+                print("No data found in the specified album!")
+                return None
+
+        except Exception as ex:
+            print(f"Data retrieval failed: {ex}")
+            return None
+
+
+# Example usage:
+if __name__ == '__main__':
+    # Provide the path to your Firebase service account credentials JSON file
+    firebase_credentials_path = "credentials.json"  # Replace with your Firebase credentials path
+
+    d = DuplicateFile(firebase_credentials_path)
+    with open("screenshot1.jpeg", "rb") as file:
+        image_data = base64.b64encode(file.read()).decode('utf-8')
+        status, file_data = d.check_duplicate(image_data, "Abhinav")  # Replace with your album name
+        if status:
+            retrieved_file_path = d.retrieve_data_from_hash(d.generate_hash(image_data.encode('utf-8')), "Abhinav", "retrieved_screenshot1.jpeg")  # Replace with your album name and desired download path
+            if retrieved_file_path:
+                print(f"Data retrieved successfully. File downloaded to: {retrieved_file_path}")
+            else:
+                print("Failed to retrieve the data.")
+        else:
+            print("Data already exists in the database.")
