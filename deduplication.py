@@ -76,11 +76,11 @@ if __name__ == '__main__':
     firebase_credentials_path = "credentials.json"  # Replace with your Firebase credentials path
 
     d = DuplicateFile(firebase_credentials_path)
-    with open("screenshot1.jpeg", "rb") as file:
+    with open("sample.jpg", "rb") as file:
         image_data = base64.b64encode(file.read()).decode('utf-8')
         status, file_data = d.check_duplicate(image_data, "Abhinav")  # Replace with your album name
         if status:
-            retrieved_file_path = d.retrieve_data_from_hash(d.generate_hash(image_data.encode('utf-8')), "Abhinav", "retrieved_screenshot1.jpeg")  # Replace with your album name and desired download path
+            retrieved_file_path = d.retrieve_data_from_hash(d.generate_hash(image_data.encode('utf-8')), "Abhinav", "retrieved_sample.jpg")  # Replace with your album name and desired download path
             if retrieved_file_path:
                 print(f"Data retrieved successfully. File downloaded to: {retrieved_file_path}")
             else:
