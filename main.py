@@ -7,6 +7,8 @@ import magic
 
 app = Flask(__name__)
 
+BLOCK_SIZE = 4096  # Define the block size for block-level deduplication
+
 
 class DuplicateFile:
     def __init__(self, firebase_credentials_path):
@@ -35,6 +37,18 @@ class DuplicateFile:
                     print("Data already exists in the database!!!")
                     return False, doc_data.get("data")
 
+            # If the data does not exist, perform block-level deduplication
+            block_hashes = [data_bytes[i:i + BLOCK_SIZE]
+                            for i in range(0, len(data_bytes), BLOCK_SIZE)]
+            combined_hash = hashlib.md5(b"".join(block_hashes)).hexdigest()
+
+            # Check if combined hash exists in the collection
+            for doc in all_docs:
+                doc_data = doc.to_dict()
+                if 'hash' in doc_data and doc_data['hash'] == combined_hash:
+                    print("Data with similar blocks already exists in the database!!!")
+                    return False, doc_data.get("data")
+
             # If the data does not exist, create a new document in the collection
             if len(data_bytes) > 1048487:
                 print(
@@ -42,7 +56,7 @@ class DuplicateFile:
                 return False, None
 
             mime_type = magic.from_buffer(data_bytes, mime=True)
-            document_data = {'hash': data_hash,
+            document_data = {'hash': combined_hash,
                              'data': data, 'mime_type': mime_type}
             collection_ref.add(document_data)
             return True, None
@@ -53,7 +67,6 @@ class DuplicateFile:
 
 
 # Initialize the DuplicateFile class
-# Replace with your Firebase credentials path
 # Replace with your Firebase credentials path
 firebase_credentials_path = "credentials.json"
 d = DuplicateFile(firebase_credentials_path)
@@ -78,8 +91,10 @@ def check_duplicate_api():
         if status:
             if existing_data is None:
                 return jsonify({'message': 'Data doesn\'t exist in the database. Added successfully.'}), 200
+            else:
+                return jsonify({'message': 'Data already exists in the database.', 'existing_data': existing_data}), 200
         else:
-            return jsonify({'message': 'Data already exists in the database.', 'existing_data': existing_data}), 200
+            return jsonify({'error': 'Error occurred while checking for duplicates.'}), 500
 
     except Exception as ex:
         return jsonify({'error': f'Error: {ex}'}), 500
