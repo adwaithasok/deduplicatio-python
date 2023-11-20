@@ -7,8 +7,6 @@ import magic
 
 app = Flask(__name__)
 
-BLOCK_SIZE = 4096  # Define the block size for block-level deduplication
-
 
 class DuplicateFile:
     def __init__(self, firebase_credentials_path):
@@ -35,19 +33,7 @@ class DuplicateFile:
                 doc_data = doc.to_dict()
                 if 'hash' in doc_data and doc_data['hash'] == data_hash:
                     print("Data already exists in the database!!!")
-                    return False, doc_data.get("data")
-
-            # If the data does not exist, perform block-level deduplication
-            block_hashes = [data_bytes[i:i + BLOCK_SIZE]
-                            for i in range(0, len(data_bytes), BLOCK_SIZE)]
-            combined_hash = hashlib.md5(b"".join(block_hashes)).hexdigest()
-
-            # Check if combined hash exists in the collection
-            for doc in all_docs:
-                doc_data = doc.to_dict()
-                if 'hash' in doc_data and doc_data['hash'] == combined_hash:
-                    print("Data with similar blocks already exists in the database!!!")
-                    return False, doc_data.get("data")
+                    return True, doc_data.get("data")
 
             # If the data does not exist, create a new document in the collection
             if len(data_bytes) > 1048487:
@@ -55,9 +41,10 @@ class DuplicateFile:
                     "Data size exceeds limit. Consider storing in chunks or in storage services.")
                 return False, None
 
-            mime_type = magic.from_buffer(data_bytes, mime=True)
-            document_data = {'hash': combined_hash,
-                             'data': data, 'mime_type': mime_type}
+            mime_type = magic.Magic()
+            mime_type_value = mime_type.from_buffer(data_bytes)
+            document_data = {'hash': data_hash,
+                             'data': data, 'mime_type': mime_type_value}
             collection_ref.add(document_data)
             return True, None
 
@@ -87,6 +74,8 @@ def check_duplicate_api():
 
         # Check for duplicate
         status, existing_data = d.check_duplicate(encoded_data, album)
+        print(status)
+        print(existing_data)
 
         if status:
             if existing_data is None:
