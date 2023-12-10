@@ -1,3 +1,6 @@
+import dbm
+from flask import send_file, make_response
+from flask import send_file
 from flask import Flask, request, jsonify, send_file
 from flask import Flask, request, jsonify, abort
 import base64
@@ -91,6 +94,35 @@ def register_user():
         users_ref.add(user_data)
 
         return jsonify({'message': 'User registered successfully.'}), 200
+
+    except Exception as ex:
+        return jsonify({'error': f'Error: {ex}'}), 500
+
+
+@app.route('/edit_user', methods=['PUT'])
+def edit_user():
+    try:
+        db = firestore.client()  # Add this line to declare db as a global variable
+        if 'register_number' not in request.json:
+            return jsonify({'error': 'Invalid request. Make sure to include "register_number".'}), 400
+
+        register_number = request.json['register_number']
+        users_ref = db.collection('users')
+
+        # Check if the user with the given register_number exists
+        query = users_ref.where('register_number', '==', register_number)
+        docs = query.stream()
+
+        user_doc = next(docs, None)
+
+        if not user_doc:
+            return jsonify({'error': 'User not found with the specified register number.'}), 404
+
+        # Update user data
+        updated_data = request.json.get('updated_data', {})
+        user_doc.reference.update(updated_data)
+
+        return jsonify({'message': 'User data updated successfully.'}), 200
 
     except Exception as ex:
         return jsonify({'error': f'Error: {ex}'}), 500
@@ -255,18 +287,46 @@ def download_data():
         return jsonify({'error': 'Invalid request. Make sure to include "register_number".'}), 400
 
     try:
-        # Fetch data from the "hello" collection for the specified register_number
-        users_ref = duplicate_checker.db.collection(
-            'users').document(register_number).collection('hello')
-        docs = users_ref.stream()
+        users_ref = duplicate_checker.db.collection('AssignmentCS')
 
-        # Extract data from each document
-        all_data = [doc.to_dict() for doc in docs]
+        query = users_ref.where('register_number', '==', register_number)
+        docs = query.stream()
 
-        return jsonify({'data': all_data}), 200
+        # Check if any documents exist
+        if not docs:
+            return jsonify({'error': 'User not found with the specified register number.'}), 404
+
+        # Assuming there could be multiple documents, iterating over them
+        for doc in docs:
+            # Extract data from the document
+            user_data_dict = doc.to_dict()
+
+            # Assume your data is stored in a 'data' field in the document
+            data_to_download = user_data_dict.get('data', '')
+
+            # Decode Base64
+            decoded_data = base64.b64decode(data_to_download)
+
+            # Get the MIME type dynamically, defaulting to 'application/octet-stream'
+            mime_type = user_data_dict.get(
+                'mime_type')
+
+            # Save the data to a local file
+            # Adjust the file extension based on MIME type
+            local_filename = f'{register_number}.{mime_type.split("/")[1]}'
+            with open(local_filename, 'wb') as file:
+                file.write(decoded_data)
+
+            # Return the file as a response with the appropriate headers
+            response = make_response(send_file(local_filename))
+            response.headers['Content-Type'] = mime_type
+            response.headers['Content-Disposition'] = f'attachment; filename={local_filename}'
+            return response, 200
 
     except Exception as ex:
         return jsonify({'error': f'Error: {ex}'}), 500
+
+    return jsonify({'error': 'User not found with the specified register number.'}), 404
 
 
 # @app.route('/download_data', methods=['GET'])
