@@ -21,6 +21,26 @@ class DuplicateFile:
         firebase_admin.initialize_app(cred)
         self.db = firestore.client()
 
+    def delete_user(self, register_number):
+        try:
+            users_ref = self.db.collection('users')
+
+            # Check if the user with the given register_number exists
+            query = users_ref.where('register_number', '==', register_number)
+            docs = query.stream()
+
+            user_doc = next(docs, None)
+
+            if not user_doc:
+                return False, {'error': 'User not found with the specified register number.'}
+
+            # Delete the user document
+            user_doc.reference.delete()
+            return True, {'message': 'User deleted successfully.'}
+
+        except Exception as ex:
+            return False, {'error': f'Error: {ex}'}
+
     def generate_hash(self, data):
         return hashlib.md5(data).hexdigest()
 
@@ -39,7 +59,11 @@ class DuplicateFile:
                 doc_data = doc.to_dict()
                 if 'hash' in doc_data and doc_data['hash'] == data_hash:
                     print("Data already exists in the database!!!")
-                    return True, doc_data.get("data")
+                    if register_number != doc_data['register_number']:
+                        document_data = {'isDuplicateHappend': True,
+                                         'register_number': register_number}
+                        collection_ref.add(document_data)
+                    return True, ""
 
             # If the data does not exist, create a new document in the collection
             if len(data_bytes) > 1048487:
@@ -150,6 +174,24 @@ def login_user():
 
     except Exception as ex:
         return jsonify({'error': f'Error: {ex}'}), 401
+
+
+@app.route('/delete_user', methods=['DELETE'])
+def delete_user():
+    if 'register_number' not in request.json:
+        return jsonify({'error': 'Invalid request. Make sure to include "register_number".'}), 400
+
+    try:
+        register_number = request.json['register_number']
+        status, response = duplicate_checker.delete_user(register_number)
+
+        if status:
+            return jsonify(response), 200
+        else:
+            return jsonify(response), 404
+
+    except Exception as ex:
+        return jsonify({'error': f'Error: {ex}'}), 500
 
 
 @app.route('/get_all_users', methods=['GET'])
@@ -327,6 +369,48 @@ def download_data():
         return jsonify({'error': f'Error: {ex}'}), 500
 
     return jsonify({'error': 'User not found with the specified register number.'}), 404
+
+
+@app.route('/check_upload_status', methods=['GET'])
+def check_upload_status():
+    register_number = request.args.get('register_number')
+
+    if not register_number:
+        return jsonify({'error': 'Invalid request. Make sure to include "register_number".'}), 400
+
+    try:
+        users_ref = duplicate_checker.db.collection('AssignmentCS')
+
+        query = users_ref.where('register_number', '==', register_number)
+        docs = query.stream()
+
+        # Check if any documents exist for the specified register number
+        dosc_resp = {}
+        for doc in docs:
+            user_data_dict = doc.to_dict()
+            print("hello", user_data_dict)
+            if doc.id is not None:
+                dosc_resp['document_id'] = doc.id
+            if user_data_dict.get('data', '') != "":
+                dosc_resp['data'] = user_data_dict.get('data', '')
+            if user_data_dict.get('mime_type', '') != "":
+                dosc_resp['mime_type'] = user_data_dict.get('mime_type', '')
+            if user_data_dict.get('workNumber', '') != "":
+                dosc_resp['work_number'] = user_data_dict.get('workNumber', '')
+            if user_data_dict.get('isDuplicateHappend', '') != "":
+                dosc_resp['isDuplicateHappend'] = user_data_dict.get(
+                    'isDuplicateHappend', '')
+            if user_data_dict.get('register_number', '') != "":
+                dosc_resp['register_number'] = user_data_dict.get(
+                    'register_number', '')
+
+        if dosc_resp.get("data", "") == "":
+            return jsonify({'status': False, 'message': 'No data uploaded for the specified register number.', 'uploaded_data': dosc_resp}), 200
+        else:
+            return jsonify({'status': True, 'message': 'Data uploaded for the specified register number.', 'uploaded_data': dosc_resp}), 200
+
+    except Exception as ex:
+        return jsonify({'status': False, 'error': f'Error: {ex}'}), 500
 
 
 # @app.route('/download_data', methods=['GET'])
